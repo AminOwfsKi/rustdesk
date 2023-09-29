@@ -54,7 +54,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   @override
   void initState() {
     super.initState();
-    _ffi = FFI();
+    _ffi = FFI(null);
     _ffi.start(widget.id,
         isPortForward: true,
         password: widget.password,
@@ -266,7 +266,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   void refreshTunnelConfig() async {
-    String peer = await bind.mainGetPeer(id: widget.id);
+    String peer = bind.mainGetPeerSync(id: widget.id);
     Map<String, dynamic> config = jsonDecode(peer);
     List<dynamic> infos = config['port_forwards'] as List;
     List<_PortForward> result = List.empty(growable: true);

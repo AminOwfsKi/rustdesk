@@ -33,9 +33,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
 
-  /// Nested scroll controller
-  final _scrollController = ScrollController();
-
   Timer? _updateTimer;
 
   final RxBool _idInputFocused = false.obs;
@@ -68,6 +65,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       _idController.selection = TextSelection(
           baseOffset: 0, extentOffset: _idController.value.text.length);
     });
+    Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
 
@@ -76,6 +74,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     _idController.dispose();
     _updateTimer?.cancel();
     windowManager.removeListener(this);
+    if (Get.isRegistered<IDTextEditingController>()) {
+      Get.delete<IDTextEditingController>();
+    }
     super.dispose();
   }
 
@@ -102,7 +103,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   void onWindowLeaveFullScreen() {
     // Restore edge border to default edge size.
-    stateGlobal.resizeEdgeSize.value = kWindowEdgeSize;
+    stateGlobal.resizeEdgeSize.value =
+        stateGlobal.isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
   }
 
   @override
@@ -116,30 +118,18 @@ class _ConnectionPageState extends State<ConnectionPage>
     return Column(
       children: [
         Expanded(
-          child: DesktopScrollWrapper(
-            scrollController: _scrollController,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: DraggableNeverScrollableScrollPhysics(),
-              slivers: [
-                SliverList(
-                    delegate: SliverChildListDelegate([
-                  Row(
-                    children: [
-                      Flexible(child: _buildRemoteIDTextField(context)),
-                    ],
-                  ).marginOnly(top: 22),
-                  SizedBox(height: 12),
-                  Divider().paddingOnly(right: 12),
-                ])),
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: PeerTabPage().paddingOnly(right: 12.0),
-                )
+            child: Column(
+          children: [
+            Row(
+              children: [
+                Flexible(child: _buildRemoteIDTextField(context)),
               ],
-            ).paddingOnly(left: 12.0),
-          ),
-        ),
+            ).marginOnly(top: 22),
+            SizedBox(height: 12),
+            Divider().paddingOnly(right: 12),
+            Expanded(child: PeerTabPage()),
+          ],
+        ).paddingOnly(left: 12.0)),
         const Divider(height: 1),
         buildStatus()
       ],
