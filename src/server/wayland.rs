@@ -1,6 +1,6 @@
 use super::*;
 use hbb_common::{allow_err, platform::linux::DISTRO};
-use scrap::{is_cursor_embedded, set_map_err, Capturer, Frame, TraitCapturer};
+use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
 use std::process::{Command, Output};
 
@@ -139,7 +139,7 @@ pub(super) async fn check_init() -> ResultType<()> {
         if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
             let mut lock = CAP_DISPLAY_INFO.write().unwrap();
             if *lock == 0 {
-                let mut all = super::display_service::get_displays(true)?;
+                let mut all = Display::all()?;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 let current = primary;
@@ -175,7 +175,12 @@ pub(super) async fn check_init() -> ResultType<()> {
                             .trim_end_matches(",")
                             .parse()
                             .unwrap_or(origin.1 + height as i32);
-                        (w, h)
+                        if w < origin.0 + width as i32 || h < origin.1 + height as i32 {
+                            (origin.0 + width as i32, origin.1 + height as i32)
+                        }
+                        else{
+                            (w, h)
+                        }
                     }
                     _ => (origin.0 + width as i32, origin.1 + height as i32),
                 };
