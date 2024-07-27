@@ -32,14 +32,18 @@ class DesktopServerPage extends StatefulWidget {
 class _DesktopServerPageState extends State<DesktopServerPage>
     with WindowListener, AutomaticKeepAliveClientMixin {
   final tabController = gFFI.serverModel.tabController;
-  @override
-  void initState() {
+
+  _DesktopServerPageState() {
     gFFI.ffiModel.updateEventListener(gFFI.sessionId, "");
-    windowManager.addListener(this);
     Get.put<DesktopTabController>(tabController);
     tabController.onRemoved = (_, id) {
       onRemoveId(id);
     };
+  }
+
+  @override
+  void initState() {
+    windowManager.addListener(this);
     super.initState();
   }
 
@@ -108,17 +112,7 @@ class ConnectionManagerState extends State<ConnectionManager>
     with WidgetsBindingObserver {
   final RxBool _block = false.obs;
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      shouldBeBlocked(_block, null);
-    }
-  }
-
-  @override
-  void initState() {
-    gFFI.serverModel.updateClientState();
+  ConnectionManagerState() {
     gFFI.serverModel.tabController.onSelected = (client_id_str) {
       final client_id = int.tryParse(client_id_str);
       if (client_id != null) {
@@ -127,7 +121,7 @@ class ConnectionManagerState extends State<ConnectionManager>
         if (client != null) {
           gFFI.chatModel.changeCurrentKey(MessageKey(client.peerId, client.id));
           if (client.unreadChatMessageCount.value > 0) {
-            Future.delayed(Duration.zero, () {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
               client.unreadChatMessageCount.value = 0;
               gFFI.chatModel.showChatPage(MessageKey(client.peerId, client.id));
             });
@@ -138,6 +132,21 @@ class ConnectionManagerState extends State<ConnectionManager>
       }
     };
     gFFI.chatModel.isConnManager = true;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      if (!allowRemoteCMModification()) {
+        shouldBeBlocked(_block, null);
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    gFFI.serverModel.updateClientState();
     WidgetsBinding.instance.addObserver(this);
     super.initState();
   }
@@ -183,7 +192,7 @@ class ConnectionManagerState extends State<ConnectionManager>
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
               tail: null, //buildScrollJumper(),
-              blockTab: _block,
+              blockTab: allowRemoteCMModification() ? null : _block,
               selectedTabBackgroundColor:
                   Theme.of(context).hintColor.withOpacity(0),
               tabBuilder: (key, icon, label, themeConf) {
@@ -226,10 +235,12 @@ class ConnectionManagerState extends State<ConnectionManager>
                       Consumer<ChatModel>(
                           builder: (_, model, child) => SizedBox(
                                 width: realChatPageWidth,
-                                child: buildRemoteBlock(
-                                    child: buildSidePage(),
-                                    block: _block,
-                                    mask: true),
+                                child: allowRemoteCMModification()
+                                    ? buildSidePage()
+                                    : buildRemoteBlock(
+                                        child: buildSidePage(),
+                                        block: _block,
+                                        mask: true),
                               )),
                     SizedBox(
                         width: realClosedWidth,
@@ -395,7 +406,10 @@ class _CmHeaderState extends State<_CmHeader>
         _time.value = _time.value + 1;
       }
     });
-    gFFI.serverModel.tabController.onSelected?.call(client.id.toString());
+    // Call onSelected in post frame callback, since we cannot guarantee that the callback will not call setState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      gFFI.serverModel.tabController.onSelected?.call(client.id.toString());
+    });
   }
 
   @override
@@ -728,7 +742,8 @@ class _CmControlPanel extends StatelessWidget {
                 child: buildButton(context,
                     color: MyTheme.accent,
                     onClick: null, onTapDown: (details) async {
-                  final devicesInfo = await AudioInput.getDevicesInfo();
+                  final devicesInfo =
+                      await AudioInput.getDevicesInfo(true, true);
                   List<String> devices = devicesInfo['devices'] as List<String>;
                   if (devices.isEmpty) {
                     msgBox(
@@ -754,13 +769,14 @@ class _CmControlPanel extends StatelessWidget {
                               value: d,
                               height: 18,
                               padding: EdgeInsets.zero,
-                              onTap: () => AudioInput.setDevice(d),
+                              onTap: () => AudioInput.setDevice(d, true, true),
                               child: IgnorePointer(
                                   child: RadioMenuButton(
                                 value: d,
                                 groupValue: currentDevice,
                                 onChanged: (v) {
-                                  if (v != null) AudioInput.setDevice(v);
+                                  if (v != null)
+                                    AudioInput.setDevice(v, true, true);
                                 },
                                 child: Container(
                                   child: Text(
@@ -1057,12 +1073,21 @@ class _CmControlPanel extends StatelessWidget {
 }
 
 void checkClickTime(int id, Function() callback) async {
+  if (allowRemoteCMModification()) {
+    callback();
+    return;
+  }
   var clickCallbackTime = DateTime.now().millisecondsSinceEpoch;
   await bind.cmCheckClickTime(connId: id);
   Timer(const Duration(milliseconds: 120), () async {
     var d = clickCallbackTime - await bind.cmGetClickTime();
     if (d > 120) callback();
   });
+}
+
+bool allowRemoteCMModification() {
+  return option2bool(kOptionAllowRemoteCmModification,
+      bind.mainGetLocalOption(key: kOptionAllowRemoteCmModification));
 }
 
 class _FileTransferLogPage extends StatefulWidget {
